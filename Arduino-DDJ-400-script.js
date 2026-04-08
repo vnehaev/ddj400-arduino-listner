@@ -1,4 +1,4 @@
-// Pioneer-DDJ-400-script.js
+// Arduino-DDJ-400-script.js
 // ****************************************************************************
 // * Mixxx mapping script file for the Pioneer DDJ-400.
 // * Authors: Warker, nschloe, dj3730, jusko, tiesjan
