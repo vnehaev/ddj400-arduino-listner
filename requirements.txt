@@ -1,0 +1,4 @@
+luma.oled
+pillow
+pyserial
+smbus2
