@@ -42,9 +42,9 @@
 //        * Pad FX2
 //        * Keyshift mode
 
-var PioneerDDJ400 = {};
+var ArduinoDDJ400 = {};
 
-PioneerDDJ400.lights = {
+ArduinoDDJ400.lights = {
     beatFx: {
         status: 0x94,
         data1: 0x47,
@@ -100,28 +100,28 @@ PioneerDDJ400.lights = {
 };
 
 // Store timer IDs
-PioneerDDJ400.timers = {};
+ArduinoDDJ400.timers = {};
 
 // Jog wheel constants
-PioneerDDJ400.vinylMode = true;
-PioneerDDJ400.alpha = 1.0/8;
-PioneerDDJ400.beta = PioneerDDJ400.alpha/32;
+ArduinoDDJ400.vinylMode = true;
+ArduinoDDJ400.alpha = 1.0/8;
+ArduinoDDJ400.beta = ArduinoDDJ400.alpha/32;
 
 // Multiplier for fast seek through track using SHIFT+JOGWHEEL
-PioneerDDJ400.fastSeekScale = 150;
-PioneerDDJ400.bendScale = 0.8;
+ArduinoDDJ400.fastSeekScale = 150;
+ArduinoDDJ400.bendScale = 0.8;
 
-PioneerDDJ400.tempoRanges = [0.06, 0.10, 0.16, 0.25];
+ArduinoDDJ400.tempoRanges = [0.06, 0.10, 0.16, 0.25];
 
-PioneerDDJ400.shiftButtonDown = [false, false];
+ArduinoDDJ400.shiftButtonDown = [false, false];
 
 // Jog wheel loop adjust
-PioneerDDJ400.loopAdjustIn = [false, false];
-PioneerDDJ400.loopAdjustOut = [false, false];
-PioneerDDJ400.loopAdjustMultiply = 50;
+ArduinoDDJ400.loopAdjustIn = [false, false];
+ArduinoDDJ400.loopAdjustOut = [false, false];
+ArduinoDDJ400.loopAdjustMultiply = 50;
 
 // Beatjump pad (beatjump_size values)
-PioneerDDJ400.beatjumpSizeForPad = {
+ArduinoDDJ400.beatjumpSizeForPad = {
     0x20: -1, // PAD 1
     0x21: 1,  // PAD 2
     0x22: -2, // PAD 3
@@ -132,15 +132,15 @@ PioneerDDJ400.beatjumpSizeForPad = {
     0x27: 8   // PAD 8
 };
 
-PioneerDDJ400.quickJumpSize = 32;
+ArduinoDDJ400.quickJumpSize = 32;
 
 // Used for tempo slider
-PioneerDDJ400.highResMSB = {
+ArduinoDDJ400.highResMSB = {
     "[Channel1]": {},
     "[Channel2]": {}
 };
 
-PioneerDDJ400.trackLoadedLED = function(value, group, _control) {
+ArduinoDDJ400.trackLoadedLED = function(value, group, _control) {
     midi.sendShortMsg(
         0x9F,
         group.match(script.channelRegEx)[1] - 1,
@@ -148,22 +148,166 @@ PioneerDDJ400.trackLoadedLED = function(value, group, _control) {
     );
 };
 
-PioneerDDJ400.toggleLight = function(midiIn, active) {
+ArduinoDDJ400.toggleLight = function(midiIn, active) {
     midi.sendShortMsg(midiIn.status, midiIn.data1, active ? 0x7F : 0);
+};
+
+ArduinoDDJ400.displaySysexManufacturerId = 0x7D;
+ArduinoDDJ400.displayTimer = 0;
+ArduinoDDJ400.displayDeckGroups = ["[Channel1]", "[Channel2]"];
+ArduinoDDJ400.hasPlayerApi = typeof engine.getPlayer === "function";
+ArduinoDDJ400.displayBpmPlaceholder = "-.-";
+ArduinoDDJ400.displayKeyPlaceholder = "--";
+ArduinoDDJ400.camelotKeys = {
+    1: "8B",
+    2: "3B",
+    3: "10B",
+    4: "5B",
+    5: "12B",
+    6: "7B",
+    7: "2B",
+    8: "9B",
+    9: "4B",
+    10: "11B",
+    11: "6B",
+    12: "1B",
+    13: "5A",
+    14: "12A",
+    15: "7A",
+    16: "2A",
+    17: "9A",
+    18: "4A",
+    19: "11A",
+    20: "6A",
+    21: "1A",
+    22: "8A",
+    23: "3A",
+    24: "10A"
+};
+ArduinoDDJ400.classicalKeys = {
+    1: "C",
+    2: "Db",
+    3: "D",
+    4: "Eb",
+    5: "E",
+    6: "F",
+    7: "F#/Gb",
+    8: "G",
+    9: "Ab",
+    10: "A",
+    11: "Bb",
+    12: "B",
+    13: "Cm",
+    14: "C#m",
+    15: "Dm",
+    16: "D#m/Ebm",
+    17: "Em",
+    18: "Fm",
+    19: "F#m",
+    20: "Gm",
+    21: "G#m",
+    22: "Am",
+    23: "Bbm",
+    24: "Bm"
+};
+
+ArduinoDDJ400.sendDisplayLine = function(line) {
+    const message = [0xF0, ArduinoDDJ400.displaySysexManufacturerId];
+
+    for (let i = 0; i < line.length; ++i) {
+        message.push(line.charCodeAt(i) & 0x7F);
+    }
+
+    message.push(0xF7);
+    midi.sendSysexMsg(message, message.length);
+};
+
+ArduinoDDJ400.formatDisplayText = function(value) {
+    return String(value || "")
+        .replace(/[\r\n]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+};
+
+ArduinoDDJ400.sendDisplayField = function(name, value) {
+    ArduinoDDJ400.sendDisplayLine(name + ":" + ArduinoDDJ400.formatDisplayText(value));
+};
+
+ArduinoDDJ400.formatDisplayKey = function(value) {
+    if (value === undefined || value === null || value === "") {
+        return ArduinoDDJ400.displayKeyPlaceholder;
+    }
+
+    const numericKey = Number(value);
+    if (Number.isInteger(numericKey) && ArduinoDDJ400.camelotKeys[numericKey]) {
+        const camelotKey = ArduinoDDJ400.camelotKeys[numericKey];
+        const classicalKey = ArduinoDDJ400.classicalKeys[numericKey];
+        return classicalKey ? camelotKey + "(" + classicalKey + ")" : camelotKey;
+    }
+
+    const keyText = String(value).trim();
+    return keyText || ArduinoDDJ400.displayKeyPlaceholder;
+};
+
+ArduinoDDJ400.getDeckDisplaySnapshot = function(group) {
+    const player = ArduinoDDJ400.hasPlayerApi ? engine.getPlayer(group) : null;
+    const bpm = engine.getValue(group, "bpm");
+    const duration = engine.getValue(group, "duration");
+    const playposition = engine.getValue(group, "playposition");
+    const elapsed = duration > 0 ? Math.max(0, Math.round(duration * Math.max(0, playposition))) : 0;
+    const legacyKey = engine.getValue(group, "key");
+
+    return {
+        bpm: bpm > 0 ? bpm.toFixed(1) : ArduinoDDJ400.displayBpmPlaceholder,
+        key: ArduinoDDJ400.formatDisplayKey(player ? player.key : legacyKey),
+        title: player ? player.title : "",
+        artist: player ? player.artist : "",
+        play: engine.getValue(group, "play") ? "1" : "0",
+        loaded: engine.getValue(group, "track_loaded") ? "1" : "0",
+        loop: engine.getValue(group, "loop_enabled") ? "1" : "0",
+        elapsed: String(elapsed),
+        duration: String(duration > 0 ? Math.round(duration) : 0),
+    };
+};
+
+ArduinoDDJ400.sendDeckDisplayState = function(_value, group, _control) {
+    const deck = group === "[Channel1]" ? "D1" : "D2";
+    const snapshot = ArduinoDDJ400.getDeckDisplaySnapshot(group);
+
+    ArduinoDDJ400.sendDisplayField(deck + "_BPM", snapshot.bpm);
+    ArduinoDDJ400.sendDisplayField(deck + "_KEY", snapshot.key);
+    ArduinoDDJ400.sendDisplayField(deck + "_TITLE", snapshot.title);
+    ArduinoDDJ400.sendDisplayField(deck + "_ARTIST", snapshot.artist);
+    ArduinoDDJ400.sendDisplayField(deck + "_PLAY", snapshot.play);
+    ArduinoDDJ400.sendDisplayField(deck + "_LOADED", snapshot.loaded);
+    ArduinoDDJ400.sendDisplayField(deck + "_LOOP", snapshot.loop);
+    ArduinoDDJ400.sendDisplayField(deck + "_ELAPSED", snapshot.elapsed);
+    ArduinoDDJ400.sendDisplayField(deck + "_DURATION", snapshot.duration);
+};
+
+ArduinoDDJ400.sendRecordingDisplayState = function(value, _group, _control) {
+    ArduinoDDJ400.sendDisplayField("REC_STATUS", value > 0 ? "1" : "0");
+};
+
+ArduinoDDJ400.sendDisplayHeartbeat = function() {
+    ArduinoDDJ400.displayDeckGroups.forEach(function(group) {
+        ArduinoDDJ400.sendDeckDisplayState(0, group, "");
+    });
+    ArduinoDDJ400.sendRecordingDisplayState(engine.getValue("[Recording]", "status"), "[Recording]", "status");
 };
 
 //
 // Init
 //
 
-PioneerDDJ400.init = function() {
+ArduinoDDJ400.init = function() {
     engine.setValue("[EffectRack1_EffectUnit1]", "show_focus", 1);
 
-    engine.makeUnbufferedConnection("[Channel1]", "vu_meter", PioneerDDJ400.vuMeterUpdate);
-    engine.makeUnbufferedConnection("[Channel2]", "vu_meter", PioneerDDJ400.vuMeterUpdate);
+    engine.makeUnbufferedConnection("[Channel1]", "vu_meter", ArduinoDDJ400.vuMeterUpdate);
+    engine.makeUnbufferedConnection("[Channel2]", "vu_meter", ArduinoDDJ400.vuMeterUpdate);
 
-    PioneerDDJ400.toggleLight(PioneerDDJ400.lights.deck1.vuMeter, false);
-    PioneerDDJ400.toggleLight(PioneerDDJ400.lights.deck2.vuMeter, false);
+    ArduinoDDJ400.toggleLight(ArduinoDDJ400.lights.deck1.vuMeter, false);
+    ArduinoDDJ400.toggleLight(ArduinoDDJ400.lights.deck2.vuMeter, false);
 
     engine.softTakeover("[Channel1]", "rate", true);
     engine.softTakeover("[Channel2]", "rate", true);
@@ -177,26 +321,38 @@ PioneerDDJ400.init = function() {
         engine.setValue("[App]", "num_samplers", samplerCount);
     }
     for (let i = 1; i <= samplerCount; ++i) {
-        engine.makeConnection("[Sampler" + i + "]", "play", PioneerDDJ400.samplerPlayOutputCallbackFunction);
+        engine.makeConnection("[Sampler" + i + "]", "play", ArduinoDDJ400.samplerPlayOutputCallbackFunction);
     }
 
-    engine.makeConnection("[Channel1]", "track_loaded", PioneerDDJ400.trackLoadedLED);
-    engine.makeConnection("[Channel2]", "track_loaded", PioneerDDJ400.trackLoadedLED);
+    engine.makeConnection("[Channel1]", "track_loaded", ArduinoDDJ400.trackLoadedLED);
+    engine.makeConnection("[Channel2]", "track_loaded", ArduinoDDJ400.trackLoadedLED);
+    engine.makeConnection("[Channel1]", "bpm", ArduinoDDJ400.sendDeckDisplayState);
+    engine.makeConnection("[Channel2]", "bpm", ArduinoDDJ400.sendDeckDisplayState);
+    engine.makeConnection("[Channel1]", "play", ArduinoDDJ400.sendDeckDisplayState);
+    engine.makeConnection("[Channel2]", "play", ArduinoDDJ400.sendDeckDisplayState);
+    engine.makeConnection("[Channel1]", "track_loaded", ArduinoDDJ400.sendDeckDisplayState);
+    engine.makeConnection("[Channel2]", "track_loaded", ArduinoDDJ400.sendDeckDisplayState);
+    engine.makeConnection("[Channel1]", "loop_enabled", ArduinoDDJ400.sendDeckDisplayState);
+    engine.makeConnection("[Channel2]", "loop_enabled", ArduinoDDJ400.sendDeckDisplayState);
+    engine.makeConnection("[Recording]", "status", ArduinoDDJ400.sendRecordingDisplayState);
 
     // play the "track loaded" animation on both decks at startup
     midi.sendShortMsg(0x9F, 0x00, 0x7F);
     midi.sendShortMsg(0x9F, 0x01, 0x7F);
 
-    PioneerDDJ400.setLoopButtonLights(0x90, 0x7F);
-    PioneerDDJ400.setLoopButtonLights(0x91, 0x7F);
+    ArduinoDDJ400.setLoopButtonLights(0x90, 0x7F);
+    ArduinoDDJ400.setLoopButtonLights(0x91, 0x7F);
 
-    engine.makeConnection("[Channel1]", "loop_enabled", PioneerDDJ400.loopToggle);
-    engine.makeConnection("[Channel2]", "loop_enabled", PioneerDDJ400.loopToggle);
+    engine.makeConnection("[Channel1]", "loop_enabled", ArduinoDDJ400.loopToggle);
+    engine.makeConnection("[Channel2]", "loop_enabled", ArduinoDDJ400.loopToggle);
 
     for (let i = 1; i <= 3; i++) {
-        engine.makeConnection("[EffectRack1_EffectUnit1_Effect" + i +"]", "enabled", PioneerDDJ400.toggleFxLight);
+        engine.makeConnection("[EffectRack1_EffectUnit1_Effect" + i +"]", "enabled", ArduinoDDJ400.toggleFxLight);
     }
-    engine.makeConnection("[EffectRack1_EffectUnit1]", "focused_effect", PioneerDDJ400.toggleFxLight);
+    engine.makeConnection("[EffectRack1_EffectUnit1]", "focused_effect", ArduinoDDJ400.toggleFxLight);
+
+    ArduinoDDJ400.displayTimer = engine.beginTimer(1000, ArduinoDDJ400.sendDisplayHeartbeat);
+    ArduinoDDJ400.sendDisplayHeartbeat();
 
     // query the controller for current control positions on startup
     midi.sendSysexMsg([0xF0, 0x00, 0x40, 0x05, 0x00, 0x00, 0x02, 0x06, 0x00, 0x03, 0x01, 0xf7], 12);
@@ -206,7 +362,7 @@ PioneerDDJ400.init = function() {
 // Channel level lights
 //
 
-PioneerDDJ400.vuMeterUpdate = function(value, group) {
+ArduinoDDJ400.vuMeterUpdate = function(value, group) {
     const newVal = value * 150;
 
     switch (group) {
@@ -224,29 +380,29 @@ PioneerDDJ400.vuMeterUpdate = function(value, group) {
 // Effects
 //
 
-PioneerDDJ400.toggleFxLight = function(_value, _group, _control) {
-    const enabled = engine.getValue(PioneerDDJ400.focusedFxGroup(), "enabled");
+ArduinoDDJ400.toggleFxLight = function(_value, _group, _control) {
+    const enabled = engine.getValue(ArduinoDDJ400.focusedFxGroup(), "enabled");
 
-    PioneerDDJ400.toggleLight(PioneerDDJ400.lights.beatFx, enabled);
-    PioneerDDJ400.toggleLight(PioneerDDJ400.lights.shiftBeatFx, enabled);
+    ArduinoDDJ400.toggleLight(ArduinoDDJ400.lights.beatFx, enabled);
+    ArduinoDDJ400.toggleLight(ArduinoDDJ400.lights.shiftBeatFx, enabled);
 };
 
-PioneerDDJ400.focusedFxGroup = function() {
+ArduinoDDJ400.focusedFxGroup = function() {
     const focusedFx = engine.getValue("[EffectRack1_EffectUnit1]", "focused_effect");
     return "[EffectRack1_EffectUnit1_Effect" + focusedFx + "]";
 };
 
-PioneerDDJ400.beatFxLevelDepthRotate = function(_channel, _control, value) {
-    if (PioneerDDJ400.shiftButtonDown[0] || PioneerDDJ400.shiftButtonDown[1]) {
+ArduinoDDJ400.beatFxLevelDepthRotate = function(_channel, _control, value) {
+    if (ArduinoDDJ400.shiftButtonDown[0] || ArduinoDDJ400.shiftButtonDown[1]) {
         engine.softTakeoverIgnoreNextValue("[EffectRack1_EffectUnit1]", "mix");
-        engine.setParameter(PioneerDDJ400.focusedFxGroup(), "meta", value / 0x7F);
+        engine.setParameter(ArduinoDDJ400.focusedFxGroup(), "meta", value / 0x7F);
     } else {
-        engine.softTakeoverIgnoreNextValue(PioneerDDJ400.focusedFxGroup(), "meta");
+        engine.softTakeoverIgnoreNextValue(ArduinoDDJ400.focusedFxGroup(), "meta");
         engine.setParameter("[EffectRack1_EffectUnit1]", "mix", value / 0x7F);
     }
 };
 
-PioneerDDJ400.changeFocusedEffectBy = function(numberOfSteps) {
+ArduinoDDJ400.changeFocusedEffectBy = function(numberOfSteps) {
     let focusedEffect = engine.getValue("[EffectRack1_EffectUnit1]", "focused_effect");
 
     // Convert to zero-based index
@@ -262,38 +418,38 @@ PioneerDDJ400.changeFocusedEffectBy = function(numberOfSteps) {
     engine.setValue("[EffectRack1_EffectUnit1]", "focused_effect", focusedEffect);
 };
 
-PioneerDDJ400.beatFxLeftPressed = function(_channel, _control, value) {
+ArduinoDDJ400.beatFxLeftPressed = function(_channel, _control, value) {
     if (value === 0) { return; }
 
-    PioneerDDJ400.changeFocusedEffectBy(-1);
+    ArduinoDDJ400.changeFocusedEffectBy(-1);
 };
 
-PioneerDDJ400.beatFxRightPressed = function(_channel, _control, value) {
+ArduinoDDJ400.beatFxRightPressed = function(_channel, _control, value) {
     if (value === 0) { return; }
 
-    PioneerDDJ400.changeFocusedEffectBy(1);
+    ArduinoDDJ400.changeFocusedEffectBy(1);
 };
 
-PioneerDDJ400.beatFxSelectPressed = function(_channel, _control, value) {
+ArduinoDDJ400.beatFxSelectPressed = function(_channel, _control, value) {
     if (value === 0) { return; }
 
-    engine.setValue(PioneerDDJ400.focusedFxGroup(), "next_effect", value);
+    engine.setValue(ArduinoDDJ400.focusedFxGroup(), "next_effect", value);
 };
 
-PioneerDDJ400.beatFxSelectShiftPressed = function(_channel, _control, value) {
+ArduinoDDJ400.beatFxSelectShiftPressed = function(_channel, _control, value) {
     if (value === 0) { return; }
 
-    engine.setValue(PioneerDDJ400.focusedFxGroup(), "prev_effect", value);
+    engine.setValue(ArduinoDDJ400.focusedFxGroup(), "prev_effect", value);
 };
 
-PioneerDDJ400.beatFxOnOffPressed = function(_channel, _control, value) {
+ArduinoDDJ400.beatFxOnOffPressed = function(_channel, _control, value) {
     if (value === 0) { return; }
 
-    const toggleEnabled = !engine.getValue(PioneerDDJ400.focusedFxGroup(), "enabled");
-    engine.setValue(PioneerDDJ400.focusedFxGroup(), "enabled", toggleEnabled);
+    const toggleEnabled = !engine.getValue(ArduinoDDJ400.focusedFxGroup(), "enabled");
+    engine.setValue(ArduinoDDJ400.focusedFxGroup(), "enabled", toggleEnabled);
 };
 
-PioneerDDJ400.beatFxOnOffShiftPressed = function(_channel, _control, value) {
+ArduinoDDJ400.beatFxOnOffShiftPressed = function(_channel, _control, value) {
     if (value === 0) { return; }
 
     engine.setParameter("[EffectRack1_EffectUnit1]", "mix", 0);
@@ -302,11 +458,11 @@ PioneerDDJ400.beatFxOnOffShiftPressed = function(_channel, _control, value) {
     for (let i = 1; i <= 3; i++) {
         engine.setValue("[EffectRack1_EffectUnit1_Effect" + i + "]", "enabled", 0);
     }
-    PioneerDDJ400.toggleLight(PioneerDDJ400.lights.beatFx, false);
-    PioneerDDJ400.toggleLight(PioneerDDJ400.lights.shiftBeatFx, false);
+    ArduinoDDJ400.toggleLight(ArduinoDDJ400.lights.beatFx, false);
+    ArduinoDDJ400.toggleLight(ArduinoDDJ400.lights.shiftBeatFx, false);
 };
 
-PioneerDDJ400.beatFxChannel = function(_channel, control, value, _status, group) {
+ArduinoDDJ400.beatFxChannel = function(_channel, control, value, _status, group) {
     if (value === 0x00) { return; }
 
     const enableChannel1 = control === 0x10 ? 1 : 0,
@@ -322,45 +478,45 @@ PioneerDDJ400.beatFxChannel = function(_channel, control, value, _status, group)
 // Loop IN/OUT ADJUST
 //
 
-PioneerDDJ400.toggleLoopAdjustIn = function(channel, _control, value, _status, group) {
+ArduinoDDJ400.toggleLoopAdjustIn = function(channel, _control, value, _status, group) {
     if (value === 0 || engine.getValue(group, "loop_enabled" === 0)) {
         return;
     }
-    PioneerDDJ400.loopAdjustIn[channel] = !PioneerDDJ400.loopAdjustIn[channel];
-    PioneerDDJ400.loopAdjustOut[channel] = false;
+    ArduinoDDJ400.loopAdjustIn[channel] = !ArduinoDDJ400.loopAdjustIn[channel];
+    ArduinoDDJ400.loopAdjustOut[channel] = false;
 };
 
-PioneerDDJ400.toggleLoopAdjustOut = function(channel, _control, value, _status, group) {
+ArduinoDDJ400.toggleLoopAdjustOut = function(channel, _control, value, _status, group) {
     if (value === 0 || engine.getValue(group, "loop_enabled" === 0)) {
         return;
     }
-    PioneerDDJ400.loopAdjustOut[channel] = !PioneerDDJ400.loopAdjustOut[channel];
-    PioneerDDJ400.loopAdjustIn[channel] = false;
+    ArduinoDDJ400.loopAdjustOut[channel] = !ArduinoDDJ400.loopAdjustOut[channel];
+    ArduinoDDJ400.loopAdjustIn[channel] = false;
 };
 
 // Two signals are sent here so that the light stays lit/unlit in its shift state too
-PioneerDDJ400.setReloopLight = function(status, value) {
+ArduinoDDJ400.setReloopLight = function(status, value) {
     midi.sendShortMsg(status, 0x4D, value);
     midi.sendShortMsg(status, 0x50, value);
 };
 
 
-PioneerDDJ400.setLoopButtonLights = function(status, value) {
+ArduinoDDJ400.setLoopButtonLights = function(status, value) {
     [0x10, 0x11, 0x4E, 0x4C].forEach(function(control) {
         midi.sendShortMsg(status, control, value);
     });
 };
 
-PioneerDDJ400.startLoopLightsBlink = function(channel, control, status, group) {
+ArduinoDDJ400.startLoopLightsBlink = function(channel, control, status, group) {
     let blink = 0x7F;
 
-    PioneerDDJ400.stopLoopLightsBlink(group, control, status);
+    ArduinoDDJ400.stopLoopLightsBlink(group, control, status);
 
-    PioneerDDJ400.timers[group][control] = engine.beginTimer(500, () => {
+    ArduinoDDJ400.timers[group][control] = engine.beginTimer(500, () => {
         blink = 0x7F - blink;
 
         // When adjusting the loop out position, turn the loop in light off
-        if (PioneerDDJ400.loopAdjustOut[channel]) {
+        if (ArduinoDDJ400.loopAdjustOut[channel]) {
             midi.sendShortMsg(status, 0x10, 0x00);
             midi.sendShortMsg(status, 0x4C, 0x00);
         } else {
@@ -369,7 +525,7 @@ PioneerDDJ400.startLoopLightsBlink = function(channel, control, status, group) {
         }
 
         // When adjusting the loop in position, turn the loop out light off
-        if (PioneerDDJ400.loopAdjustIn[channel]) {
+        if (ArduinoDDJ400.loopAdjustIn[channel]) {
             midi.sendShortMsg(status, 0x11, 0x00);
             midi.sendShortMsg(status, 0x4E, 0x00);
         } else {
@@ -380,28 +536,28 @@ PioneerDDJ400.startLoopLightsBlink = function(channel, control, status, group) {
 
 };
 
-PioneerDDJ400.stopLoopLightsBlink = function(group, control, status) {
-    PioneerDDJ400.timers[group] = PioneerDDJ400.timers[group] || {};
+ArduinoDDJ400.stopLoopLightsBlink = function(group, control, status) {
+    ArduinoDDJ400.timers[group] = ArduinoDDJ400.timers[group] || {};
 
-    if (PioneerDDJ400.timers[group][control] !== undefined) {
-        engine.stopTimer(PioneerDDJ400.timers[group][control]);
+    if (ArduinoDDJ400.timers[group][control] !== undefined) {
+        engine.stopTimer(ArduinoDDJ400.timers[group][control]);
     }
-    PioneerDDJ400.timers[group][control] = undefined;
-    PioneerDDJ400.setLoopButtonLights(status, 0x7F);
+    ArduinoDDJ400.timers[group][control] = undefined;
+    ArduinoDDJ400.setLoopButtonLights(status, 0x7F);
 };
 
-PioneerDDJ400.loopToggle = function(value, group, control) {
+ArduinoDDJ400.loopToggle = function(value, group, control) {
     const status = group === "[Channel1]" ? 0x90 : 0x91,
         channel = group === "[Channel1]" ? 0 : 1;
 
-    PioneerDDJ400.setReloopLight(status, value ? 0x7F : 0x00);
+    ArduinoDDJ400.setReloopLight(status, value ? 0x7F : 0x00);
 
     if (value) {
-        PioneerDDJ400.startLoopLightsBlink(channel, control, status, group);
+        ArduinoDDJ400.startLoopLightsBlink(channel, control, status, group);
     } else {
-        PioneerDDJ400.stopLoopLightsBlink(group, control, status);
-        PioneerDDJ400.loopAdjustIn[channel] = false;
-        PioneerDDJ400.loopAdjustOut[channel] = false;
+        ArduinoDDJ400.stopLoopLightsBlink(group, control, status);
+        ArduinoDDJ400.loopAdjustIn[channel] = false;
+        ArduinoDDJ400.loopAdjustOut[channel] = false;
     }
 };
 
@@ -409,13 +565,13 @@ PioneerDDJ400.loopToggle = function(value, group, control) {
 // CUE/LOOP CALL
 //
 
-PioneerDDJ400.cueLoopCallLeft = function(_channel, _control, value, _status, group) {
+ArduinoDDJ400.cueLoopCallLeft = function(_channel, _control, value, _status, group) {
     if (value) {
         engine.setValue(group, "loop_scale", 0.5);
     }
 };
 
-PioneerDDJ400.cueLoopCallRight = function(_channel, _control, value, _status, group) {
+ArduinoDDJ400.cueLoopCallRight = function(_channel, _control, value, _status, group) {
     if (value) {
         engine.setValue(group, "loop_scale", 2.0);
     }
@@ -428,7 +584,7 @@ PioneerDDJ400.cueLoopCallRight = function(_channel, _control, value, _status, gr
 // press of the same button.
 //
 
-PioneerDDJ400.syncPressed = function(channel, control, value, status, group) {
+ArduinoDDJ400.syncPressed = function(channel, control, value, status, group) {
     if (engine.getValue(group, "sync_enabled") && value > 0) {
         engine.setValue(group, "sync_enabled", 0);
     } else {
@@ -436,13 +592,13 @@ PioneerDDJ400.syncPressed = function(channel, control, value, status, group) {
     }
 };
 
-PioneerDDJ400.syncLongPressed = function(channel, control, value, status, group) {
+ArduinoDDJ400.syncLongPressed = function(channel, control, value, status, group) {
     if (value) {
         engine.setValue(group, "sync_enabled", 1);
     }
 };
 
-PioneerDDJ400.cycleTempoRange = function(_channel, _control, value, _status, group) {
+ArduinoDDJ400.cycleTempoRange = function(_channel, _control, value, _status, group) {
     if (value === 0) { return; } // ignore release
 
     const currRange = engine.getValue(group, "rateRange");
@@ -461,7 +617,7 @@ PioneerDDJ400.cycleTempoRange = function(_channel, _control, value, _status, gro
 // Jog wheels
 //
 
-PioneerDDJ400.jogTurn = function(channel, _control, value, _status, group) {
+ArduinoDDJ400.jogTurn = function(channel, _control, value, _status, group) {
     const deckNum = channel + 1;
     // wheel center at 64; <64 rew >64 fwd
     let newVal = value - 64;
@@ -469,13 +625,13 @@ PioneerDDJ400.jogTurn = function(channel, _control, value, _status, group) {
     // loop_in / out adjust
     const loopEnabled = engine.getValue(group, "loop_enabled");
     if (loopEnabled > 0) {
-        if (PioneerDDJ400.loopAdjustIn[channel]) {
-            newVal = newVal * PioneerDDJ400.loopAdjustMultiply + engine.getValue(group, "loop_start_position");
+        if (ArduinoDDJ400.loopAdjustIn[channel]) {
+            newVal = newVal * ArduinoDDJ400.loopAdjustMultiply + engine.getValue(group, "loop_start_position");
             engine.setValue(group, "loop_start_position", newVal);
             return;
         }
-        if (PioneerDDJ400.loopAdjustOut[channel]) {
-            newVal = newVal * PioneerDDJ400.loopAdjustMultiply + engine.getValue(group, "loop_end_position");
+        if (ArduinoDDJ400.loopAdjustOut[channel]) {
+            newVal = newVal * ArduinoDDJ400.loopAdjustMultiply + engine.getValue(group, "loop_end_position");
             engine.setValue(group, "loop_end_position", newVal);
             return;
         }
@@ -489,16 +645,16 @@ PioneerDDJ400.jogTurn = function(channel, _control, value, _status, group) {
 };
 
 
-PioneerDDJ400.jogSearch = function(_channel, _control, value, _status, group) {
-    const newVal = (value - 64) * PioneerDDJ400.fastSeekScale;
+ArduinoDDJ400.jogSearch = function(_channel, _control, value, _status, group) {
+    const newVal = (value - 64) * ArduinoDDJ400.fastSeekScale;
     engine.setValue(group, "jog", newVal);
 };
 
-PioneerDDJ400.jogTouch = function(channel, _control, value) {
+ArduinoDDJ400.jogTouch = function(channel, _control, value) {
     const deckNum = channel + 1;
 
     // skip while adjusting the loop points
-    if (PioneerDDJ400.loopAdjustIn[channel] || PioneerDDJ400.loopAdjustOut[channel]) {
+    if (ArduinoDDJ400.loopAdjustIn[channel] || ArduinoDDJ400.loopAdjustOut[channel]) {
         return;
     }
 
@@ -513,8 +669,8 @@ PioneerDDJ400.jogTouch = function(channel, _control, value) {
 // Shift button
 //
 
-PioneerDDJ400.shiftPressed = function(channel, _control, value, _status, _group) {
-    PioneerDDJ400.shiftButtonDown[channel] = value === 0x7F;
+ArduinoDDJ400.shiftPressed = function(channel, _control, value, _status, _group) {
+    ArduinoDDJ400.shiftButtonDown[channel] = value === 0x7F;
 };
 
 
@@ -526,12 +682,12 @@ PioneerDDJ400.shiftPressed = function(channel, _control, value, _status, _group)
 // UI and the control sliders always move in the same direction.
 //
 
-PioneerDDJ400.tempoSliderMSB = function(channel, control, value, status, group) {
-    PioneerDDJ400.highResMSB[group].tempoSlider = value;
+ArduinoDDJ400.tempoSliderMSB = function(channel, control, value, status, group) {
+    ArduinoDDJ400.highResMSB[group].tempoSlider = value;
 };
 
-PioneerDDJ400.tempoSliderLSB = function(channel, control, value, status, group) {
-    const fullValue = (PioneerDDJ400.highResMSB[group].tempoSlider << 7) + value;
+ArduinoDDJ400.tempoSliderLSB = function(channel, control, value, status, group) {
+    const fullValue = (ArduinoDDJ400.highResMSB[group].tempoSlider << 7) + value;
 
     engine.setValue(
         group,
@@ -548,49 +704,49 @@ PioneerDDJ400.tempoSliderLSB = function(channel, control, value, status, group) 
 // allow further increasing/decreasing of all the values.
 //
 
-PioneerDDJ400.beatjumpPadPressed = function(_channel, control, value, _status, group) {
+ArduinoDDJ400.beatjumpPadPressed = function(_channel, control, value, _status, group) {
     if (value === 0) {
         return;
     }
-    engine.setValue(group, "beatjump_size", Math.abs(PioneerDDJ400.beatjumpSizeForPad[control]));
-    engine.setValue(group, "beatjump", PioneerDDJ400.beatjumpSizeForPad[control]);
+    engine.setValue(group, "beatjump_size", Math.abs(ArduinoDDJ400.beatjumpSizeForPad[control]));
+    engine.setValue(group, "beatjump", ArduinoDDJ400.beatjumpSizeForPad[control]);
 };
 
-PioneerDDJ400.increaseBeatjumpSizes = function(_channel, control, value, _status, group) {
-    if (value === 0 || PioneerDDJ400.beatjumpSizeForPad[0x21] * 16 > 16) {
+ArduinoDDJ400.increaseBeatjumpSizes = function(_channel, control, value, _status, group) {
+    if (value === 0 || ArduinoDDJ400.beatjumpSizeForPad[0x21] * 16 > 16) {
         return;
     }
-    Object.keys(PioneerDDJ400.beatjumpSizeForPad).forEach(function(pad) {
-        PioneerDDJ400.beatjumpSizeForPad[pad] = PioneerDDJ400.beatjumpSizeForPad[pad] * 16;
+    Object.keys(ArduinoDDJ400.beatjumpSizeForPad).forEach(function(pad) {
+        ArduinoDDJ400.beatjumpSizeForPad[pad] = ArduinoDDJ400.beatjumpSizeForPad[pad] * 16;
     });
-    engine.setValue(group, "beatjump_size", PioneerDDJ400.beatjumpSizeForPad[0x21]);
+    engine.setValue(group, "beatjump_size", ArduinoDDJ400.beatjumpSizeForPad[0x21]);
 };
 
-PioneerDDJ400.decreaseBeatjumpSizes = function(_channel, control, value, _status, group) {
-    if (value === 0 || PioneerDDJ400.beatjumpSizeForPad[0x21] / 16 < 1/16) {
+ArduinoDDJ400.decreaseBeatjumpSizes = function(_channel, control, value, _status, group) {
+    if (value === 0 || ArduinoDDJ400.beatjumpSizeForPad[0x21] / 16 < 1/16) {
         return;
     }
-    Object.keys(PioneerDDJ400.beatjumpSizeForPad).forEach(function(pad) {
-        PioneerDDJ400.beatjumpSizeForPad[pad] = PioneerDDJ400.beatjumpSizeForPad[pad] / 16;
+    Object.keys(ArduinoDDJ400.beatjumpSizeForPad).forEach(function(pad) {
+        ArduinoDDJ400.beatjumpSizeForPad[pad] = ArduinoDDJ400.beatjumpSizeForPad[pad] / 16;
     });
-    engine.setValue(group, "beatjump_size", PioneerDDJ400.beatjumpSizeForPad[0x21]);
+    engine.setValue(group, "beatjump_size", ArduinoDDJ400.beatjumpSizeForPad[0x21]);
 };
 
 //
 // Sampler mode
 //
 
-PioneerDDJ400.samplerPlayOutputCallbackFunction = function(value, group, _control) {
+ArduinoDDJ400.samplerPlayOutputCallbackFunction = function(value, group, _control) {
     if (value === 1) {
         const curPad = group.match(script.samplerRegEx)[1];
-        PioneerDDJ400.startSamplerBlink(
+        ArduinoDDJ400.startSamplerBlink(
             0x97 + (curPad > 8 ? 2 : 0),
             0x30 + ((curPad > 8 ? curPad - 8 : curPad) - 1),
             group);
     }
 };
 
-PioneerDDJ400.samplerPadPressed = function(_channel, _control, value, _status, group) {
+ArduinoDDJ400.samplerPadPressed = function(_channel, _control, value, _status, group) {
     if (engine.getValue(group, "track_loaded")) {
         engine.setValue(group, "cue_gotoandplay", value);
     } else {
@@ -598,7 +754,7 @@ PioneerDDJ400.samplerPadPressed = function(_channel, _control, value, _status, g
     }
 };
 
-PioneerDDJ400.samplerPadShiftPressed = function(_channel, _control, value, _status, group) {
+ArduinoDDJ400.samplerPadShiftPressed = function(_channel, _control, value, _status, group) {
     if (engine.getValue(group, "play")) {
         engine.setValue(group, "cue_gotoandstop", value);
     } else if (engine.getValue(group, "track_loaded")) {
@@ -606,11 +762,11 @@ PioneerDDJ400.samplerPadShiftPressed = function(_channel, _control, value, _stat
     }
 };
 
-PioneerDDJ400.startSamplerBlink = function(channel, control, group) {
+ArduinoDDJ400.startSamplerBlink = function(channel, control, group) {
     let val = 0x7f;
 
-    PioneerDDJ400.stopSamplerBlink(channel, control);
-    PioneerDDJ400.timers[channel][control] = engine.beginTimer(250, () => {
+    ArduinoDDJ400.stopSamplerBlink(channel, control);
+    ArduinoDDJ400.timers[channel][control] = engine.beginTimer(250, () => {
         val = 0x7f - val;
 
         // blink the appropriate pad
@@ -622,7 +778,7 @@ PioneerDDJ400.startSamplerBlink = function(channel, control, group) {
 
         if (!isPlaying) {
             // kill timer
-            PioneerDDJ400.stopSamplerBlink(channel, control);
+            ArduinoDDJ400.stopSamplerBlink(channel, control);
             // set the pad LED to ON
             midi.sendShortMsg(channel, control, 0x7f);
             // set the pad LED to ON while SHIFT is pressed
@@ -631,12 +787,12 @@ PioneerDDJ400.startSamplerBlink = function(channel, control, group) {
     });
 };
 
-PioneerDDJ400.stopSamplerBlink = function(channel, control) {
-    PioneerDDJ400.timers[channel] = PioneerDDJ400.timers[channel] || {};
+ArduinoDDJ400.stopSamplerBlink = function(channel, control) {
+    ArduinoDDJ400.timers[channel] = ArduinoDDJ400.timers[channel] || {};
 
-    if (PioneerDDJ400.timers[channel][control] !== undefined) {
-        engine.stopTimer(PioneerDDJ400.timers[channel][control]);
-        PioneerDDJ400.timers[channel][control] = undefined;
+    if (ArduinoDDJ400.timers[channel][control] !== undefined) {
+        engine.stopTimer(ArduinoDDJ400.timers[channel][control]);
+        ArduinoDDJ400.timers[channel][control] = undefined;
     }
 };
 
@@ -644,21 +800,21 @@ PioneerDDJ400.stopSamplerBlink = function(channel, control) {
 // Additional features
 //
 
-PioneerDDJ400.toggleQuantize = function(_channel, _control, value, _status, group) {
+ArduinoDDJ400.toggleQuantize = function(_channel, _control, value, _status, group) {
     if (value) {
         script.toggleControl(group, "quantize");
     }
 };
 
-PioneerDDJ400.quickJumpForward = function(_channel, _control, value, _status, group) {
+ArduinoDDJ400.quickJumpForward = function(_channel, _control, value, _status, group) {
     if (value) {
-        engine.setValue(group, "beatjump", PioneerDDJ400.quickJumpSize);
+        engine.setValue(group, "beatjump", ArduinoDDJ400.quickJumpSize);
     }
 };
 
-PioneerDDJ400.quickJumpBack = function(_channel, _control, value, _status, group) {
+ArduinoDDJ400.quickJumpBack = function(_channel, _control, value, _status, group) {
     if (value) {
-        engine.setValue(group, "beatjump", -PioneerDDJ400.quickJumpSize);
+        engine.setValue(group, "beatjump", -ArduinoDDJ400.quickJumpSize);
     }
 };
 
@@ -666,10 +822,15 @@ PioneerDDJ400.quickJumpBack = function(_channel, _control, value, _status, group
 // Shutdown
 //
 
-PioneerDDJ400.shutdown = function() {
+ArduinoDDJ400.shutdown = function() {
+    if (ArduinoDDJ400.displayTimer) {
+        engine.stopTimer(ArduinoDDJ400.displayTimer);
+        ArduinoDDJ400.displayTimer = 0;
+    }
+
     // reset vumeter
-    PioneerDDJ400.toggleLight(PioneerDDJ400.lights.deck1.vuMeter, false);
-    PioneerDDJ400.toggleLight(PioneerDDJ400.lights.deck2.vuMeter, false);
+    ArduinoDDJ400.toggleLight(ArduinoDDJ400.lights.deck1.vuMeter, false);
+    ArduinoDDJ400.toggleLight(ArduinoDDJ400.lights.deck2.vuMeter, false);
 
     // housekeeping
     // turn off all Sampler LEDs
@@ -688,14 +849,14 @@ PioneerDDJ400.shutdown = function() {
     }
 
     // turn off loop in and out lights
-    PioneerDDJ400.setLoopButtonLights(0x90, 0x00);
-    PioneerDDJ400.setLoopButtonLights(0x91, 0x00);
+    ArduinoDDJ400.setLoopButtonLights(0x90, 0x00);
+    ArduinoDDJ400.setLoopButtonLights(0x91, 0x00);
 
     // turn off reloop lights
-    PioneerDDJ400.setReloopLight(0x90, 0x00);
-    PioneerDDJ400.setReloopLight(0x91, 0x00);
+    ArduinoDDJ400.setReloopLight(0x90, 0x00);
+    ArduinoDDJ400.setReloopLight(0x91, 0x00);
 
     // stop any flashing lights
-    PioneerDDJ400.toggleLight(PioneerDDJ400.lights.beatFx, false);
-    PioneerDDJ400.toggleLight(PioneerDDJ400.lights.shiftBeatFx, false);
+    ArduinoDDJ400.toggleLight(ArduinoDDJ400.lights.beatFx, false);
+    ArduinoDDJ400.toggleLight(ArduinoDDJ400.lights.shiftBeatFx, false);
 };

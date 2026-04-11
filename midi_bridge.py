@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 import sys
 import time
+
 import mido
 
-PHYSICAL_PORT_NAME = "DDJ-400 MIDI 1"
-VIRTUAL_PORT_NAME = "DDJ400 Bridge"
+from bridge_config import PHYSICAL_PORT_NAME, VIRTUAL_PORT_NAME, DISPLAY_REFRESH_INTERVAL
+from bridge_protocol import transform_ddj_to_mixxx, transform_mixxx_to_ddj
+from display_output import emit_display_state, open_display_serial
+from display_state import DisplayState
 
 
 def find_port(port_names, needle):
@@ -14,16 +17,11 @@ def find_port(port_names, needle):
     return None
 
 
-def transform_mixxx_to_ddj(msg):
-    return msg
-
-
-def transform_ddj_to_mixxx(msg):
-    return msg
-
-
 def main():
     mido.set_backend("mido.backends.rtmidi")
+    display_serial = open_display_serial()
+    display_state = DisplayState()
+    next_display_refresh = 0.0
 
     print("Available MIDI input names:")
     input_names = mido.get_input_names()
@@ -69,10 +67,15 @@ def main():
 
             # Mixxx -> Bridge -> DDJ
             for msg in mixxx_to_bridge.iter_pending():
-                print("FROM MIXXX:", msg)
-                out_msg = transform_mixxx_to_ddj(msg)
+                now = time.time()
+                out_msg = transform_mixxx_to_ddj(msg, display_serial, display_state, now)
                 if out_msg is not None:
                     ddj_out.send(out_msg)
+
+            now = time.time()
+            if now >= next_display_refresh:
+                emit_display_state(display_serial, display_state, now)
+                next_display_refresh = now + DISPLAY_REFRESH_INTERVAL
 
             time.sleep(0.001)
 
@@ -81,6 +84,8 @@ def main():
         ddj_out.close()
         mixxx_to_bridge.close()
         bridge_to_mixxx.close()
+        if display_serial is not None:
+            display_serial.close()
 
 
 if __name__ == "__main__":
